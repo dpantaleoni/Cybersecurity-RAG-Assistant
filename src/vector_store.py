@@ -52,11 +52,14 @@ class VectorStoreManager:
                     vector_store=self.vector_store
                 )
                 
-                # Use a lightweight wrapper - don't re-embed
+                # Build index from stored nodes (they link vectors to text via docstore)
                 from llama_index.core import VectorStoreIndex
-                self.index = VectorStoreIndex.from_vector_store(
-                    vector_store=self.vector_store,
-                    storage_context=self.storage_context
+                # The vectors are already in FAISS, the nodes are in docstore
+                # We just need to create the index wrapper without re-embedding
+                self.index = VectorStoreIndex(
+                    nodes=[],  # Empty - vectors already in FAISS
+                    storage_context=self.storage_context,
+                    show_progress=False
                 )
                 
                 logger.info(f"FAISS index loaded successfully with {self.vector_store._faiss_index.ntotal} vectors")
