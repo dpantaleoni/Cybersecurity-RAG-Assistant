@@ -22,11 +22,13 @@ class EmbeddingManager:
         
         logger.info(f"Loading embedding model: {settings.embedding_model}")
         try:
+            # Use built-in normalization so cosine similarity via inner product works
             self.embedding_model = HuggingFaceEmbedding(
                 model_name=settings.embedding_model,
-                cache_folder="./storage/models"
+                cache_folder="./storage/models",
+                normalize=True
             )
-            logger.info("Embedding model loaded successfully")
+            logger.info("Embedding model loaded successfully (normalize=True)")
         except Exception as e:
             logger.error(f"Failed to load embedding model: {e}")
             raise

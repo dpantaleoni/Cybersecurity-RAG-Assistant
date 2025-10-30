@@ -1,11 +1,12 @@
 """RAG query pipeline using LlamaIndex and Ollama."""
 import time
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from llama_index.llms.ollama import Ollama
 from loguru import logger
 
 from src.config import settings
 from src.vector_store import vector_store_manager
+from src.embeddings import embedding_manager
 from src.database import db_manager
 
 
@@ -70,11 +71,47 @@ class RAGPipeline:
         try:
             logger.info(f"Processing query: {query_text[:100]}...")
             
+            # Safety check: Ensure components are initialized
+            logger.info("Checking vector store initialization...")
+            if not vector_store_manager._initialized:
+                logger.warning("Vector store not initialized, reinitializing...")
+                vector_store_manager.initialize()
+            
+            logger.info("Checking embedding manager initialization...")
+            if not embedding_manager._initialized:
+                logger.warning("Embedding manager not initialized, reinitializing...")
+                embedding_manager.initialize()
+            
+            logger.info("Getting query engine...")
             # Get query engine with our LLM
             query_engine = vector_store_manager.get_query_engine(similarity_top_k=top_k, llm=self.llm)
             
+            logger.info("Executing query...")
             # Execute query
-            response = query_engine.query(query_text)
+            try:
+                response = query_engine.query(query_text)
+                logger.info("Query executed successfully")
+            except KeyError as e:
+                logger.error(f"Index corruption detected: {e}")
+                logger.info("Attempting to rebuild index...")
+                
+                # Try to rebuild the index
+                if vector_store_manager._rebuild_index():
+                    logger.info("Index rebuilt successfully, retrying query...")
+                    # Get a new query engine and retry
+                    query_engine = vector_store_manager.get_query_engine(similarity_top_k=top_k, llm=self.llm)
+                    response = query_engine.query(query_text)
+                    logger.info("Query executed successfully after rebuild")
+                else:
+                    logger.error("Failed to rebuild index")
+                    raise
+            except Exception as e:
+                logger.error(f"Error executing query: {e}")
+                logger.error(f"Error type: {type(e)}")
+                logger.error(f"Error args: {e.args}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                raise
             
             # Extract response text
             answer = str(response)
@@ -170,6 +207,39 @@ class RAGPipeline:
         
         for text in streaming_response.response_gen:
             yield text
+    
+    def retrieve_only(
+        self,
+        query_text: str,
+        top_k: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """Retrieve relevant nodes without calling the LLM.
+        
+        Returns a list of dicts with text, score and metadata.
+        """
+        if not self._initialized:
+            self.initialize()
+        
+        # Ensure dependencies are ready
+        if not vector_store_manager._initialized:
+            vector_store_manager.initialize()
+        if not embedding_manager._initialized:
+            embedding_manager.initialize()
+        
+        retriever = vector_store_manager.get_retriever(similarity_top_k=top_k)
+        results = retriever.retrieve(query_text)
+        
+        formatted: List[Dict[str, Any]] = []
+        for node_with_score in results:
+            text = node_with_score.node.get_content()
+            snippet = text[:500] + "..." if len(text) > 500 else text
+            formatted.append({
+                "text": snippet,
+                "score": float(getattr(node_with_score, "score", 0.0)),
+                "metadata": node_with_score.node.metadata,
+            })
+        
+        return formatted
     
     def test_ollama_connection(self) -> Dict[str, Any]:
         """Test if Ollama is accessible."""

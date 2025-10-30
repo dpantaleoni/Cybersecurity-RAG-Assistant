@@ -75,8 +75,9 @@ class VectorStoreManager:
     
     def _create_new_index(self):
         """Create a new FAISS index."""
-        # Create FAISS index with L2 distance
-        faiss_index = faiss.IndexFlatL2(settings.embedding_dimension)
+        # Create FAISS index with Inner Product for cosine similarity.
+        # Embeddings are L2-normalized in EmbeddingManager so IP == cosine.
+        faiss_index = faiss.IndexFlatIP(settings.embedding_dimension)
         
         # Wrap in LlamaIndex FAISS vector store
         self.vector_store = FaissVectorStore(faiss_index=faiss_index)
@@ -88,7 +89,7 @@ class VectorStoreManager:
             storage_context=self.storage_context
         )
         
-        logger.info("New FAISS index created")
+        logger.info("New FAISS index created (Inner Product / cosine)")
     
     def _load_index(self):
         """Load existing FAISS index from disk."""
@@ -202,27 +203,53 @@ class VectorStoreManager:
     
     def get_query_engine(self, similarity_top_k: Optional[int] = None, llm=None):
         """Get a query engine for the index."""
+        logger.info("get_query_engine called")
         if not self._initialized:
+            logger.info("Vector store not initialized, initializing...")
             self.initialize()
         
-        top_k = similarity_top_k or settings.top_k
+        # Validate index integrity
+        if not self._validate_index_integrity():
+            logger.warning("Index integrity check failed, rebuilding...")
+            self._rebuild_index()
         
+        top_k = similarity_top_k or settings.top_k
+        logger.info(f"Using top_k: {top_k}")
+        
+        # Safety check: Ensure embedding manager is initialized
+        if not embedding_manager._initialized:
+            logger.warning("Embedding manager not initialized, reinitializing...")
+            embedding_manager.initialize()
+        
+        logger.info("Getting reranker...")
         # Get reranker if available
         reranker = embedding_manager.get_reranker()
+        logger.info(f"Reranker available: {reranker is not None}")
         
         # If index exists, use it
         if self.index is not None:
+            logger.info(f"Index exists, creating query engine. Index type: {type(self.index)}")
             if reranker:
+                logger.info("Creating query engine with reranker...")
                 return self.index.as_query_engine(
                     similarity_top_k=top_k,
                     node_postprocessors=[reranker],
                     llm=llm
                 )
             else:
-                return self.index.as_query_engine(
-                    similarity_top_k=top_k,
-                    llm=llm
-                )
+                logger.info("Creating query engine without reranker...")
+                logger.info(f"LLM object: {llm}")
+                logger.info(f"LLM type: {type(llm)}")
+                try:
+                    query_engine = self.index.as_query_engine(
+                        similarity_top_k=top_k,
+                        llm=llm
+                    )
+                    logger.info("Query engine created successfully")
+                    return query_engine
+                except Exception as e:
+                    logger.error(f"Error creating query engine: {e}")
+                    raise
         else:
             # For loaded FAISS stores without index, build query engine from retriever
             from llama_index.core.query_engine import RetrieverQueryEngine
@@ -262,8 +289,79 @@ class VectorStoreManager:
         self._create_new_index()
         self.save_index()
         logger.info("FAISS index cleared")
+    
+    def _validate_index_integrity(self) -> bool:
+        """Validate that the index structure is consistent."""
+        try:
+            if not self._initialized or self.index is None:
+                return False
+            
+            # Check if we can access the index structure
+            if hasattr(self.index, 'index_struct') and hasattr(self.index.index_struct, 'nodes_dict'):
+                nodes_dict = self.index.index_struct.nodes_dict
+                if not nodes_dict:
+                    logger.warning("Index has no nodes")
+                    return False
+                
+                # Try to access a few nodes to see if they exist
+                sample_ids = list(nodes_dict.keys())[:3]  # Check first 3 nodes
+                for node_id in sample_ids:
+                    if node_id not in nodes_dict:
+                        logger.warning(f"Node {node_id} missing from index structure")
+                        return False
+                
+                logger.info("Index integrity check passed")
+                return True
+            else:
+                logger.warning("Index structure is invalid")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Index integrity check failed: {e}")
+            return False
+    
+    def _rebuild_index(self):
+        """Rebuild the index from scratch."""
+        logger.info("Rebuilding index...")
+        try:
+            # Clear existing data
+            self.clear_index()
+            
+            # Clear database to avoid duplicate issues
+            import os
+            db_path = settings.metadata_db_path
+            if db_path.exists():
+                os.remove(db_path)
+                logger.info("Database cleared for rebuild")
+            
+            # Re-ingest documents
+            from src.ingestion import DocumentIngestionService
+            from pathlib import Path
+            ingestion_manager = DocumentIngestionService()
+            result = ingestion_manager.ingest_directory(Path("docs"))
+            
+            if result["successful"] > 0:
+                logger.info(f"Successfully rebuilt index with {result['successful']} documents")
+                return True
+            else:
+                logger.error("Failed to rebuild index - no documents ingested")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Failed to rebuild index: {e}")
+            return False
 
 
 # Global vector store manager instance
-vector_store_manager = VectorStoreManager()
+# Use a module-level variable to ensure singleton behavior
+_vector_store_manager = None
+
+def get_vector_store_manager():
+    """Get the global vector store manager instance."""
+    global _vector_store_manager
+    if _vector_store_manager is None:
+        _vector_store_manager = VectorStoreManager()
+    return _vector_store_manager
+
+vector_store_manager = get_vector_store_manager()
 

@@ -17,7 +17,7 @@ COPY src/ ./src/
 COPY .env* ./
 
 # Create necessary directories
-RUN mkdir -p /app/data /app/storage /app/storage/faiss /app/storage/metadata
+RUN mkdir -p /app/storage /app/storage/faiss /app/storage/metadata
 
 # Expose FastAPI port
 EXPOSE 8000

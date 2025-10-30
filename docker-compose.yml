@@ -6,6 +6,10 @@ services:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_KEEP_ALIVE=30m
+      - OLLAMA_NUM_PARALLEL=1
+      - OLLAMA_MAX_LOADED_MODELS=1
     networks:
       - rag-network
     healthcheck:
@@ -24,7 +28,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./data:/app/data
+      - ./docs:/app/docs
       - ./storage:/app/storage
       - ./src:/app/src
     env_file:
