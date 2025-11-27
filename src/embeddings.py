@@ -3,7 +3,6 @@ from typing import List, Optional
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.core.postprocessor import SentenceTransformerRerank
 from loguru import logger
-
 from src.config import settings
 
 

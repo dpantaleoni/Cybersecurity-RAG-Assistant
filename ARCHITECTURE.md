@@ -270,11 +270,11 @@ ncl-rag-app/
 
 ### Current Setup
 
-- ✅ Local execution (no data leaves system)
-- ✅ No external API calls
-- ✅ File system isolation
-- ⚠️ No authentication (localhost only)
-- ⚠️ No input sanitization for file paths
+- Local execution (no data leaves system)
+- No external API calls
+- File system isolation
+- No authentication (localhost only)
+- No input sanitization for file paths
 
 ### Production Hardening
 

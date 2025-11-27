@@ -20,7 +20,7 @@ if ! docker info > /dev/null 2>&1; then
     echo -e "${RED}Error: Docker is not running. Please start Docker first.${NC}"
     exit 1
 fi
-echo -e "${GREEN}✓ Docker is running${NC}"
+echo -e "${GREEN}Docker is running${NC}"
 echo ""
 
 # Build and start services
@@ -35,7 +35,7 @@ sleep 10
 echo "Checking Ollama service..."
 for i in {1..30}; do
     if curl -s http://localhost:11434/api/tags > /dev/null 2>&1; then
-        echo -e "${GREEN}✓ Ollama is ready${NC}"
+        echo -e "${GREEN}Ollama is ready${NC}"
         break
     fi
     echo "Waiting for Ollama... ($i/30)"
@@ -46,7 +46,7 @@ done
 echo "Checking API service..."
 for i in {1..30}; do
     if curl -s http://localhost:8000/health > /dev/null 2>&1; then
-        echo -e "${GREEN}✓ API is ready${NC}"
+        echo -e "${GREEN}API is ready${NC}"
         break
     fi
     echo "Waiting for API... ($i/30)"
@@ -64,7 +64,7 @@ echo ""
 docker exec ncl-rag-ollama ollama pull qwen2.5:7b-instruct
 
 echo ""
-echo -e "${GREEN}✓ Model downloaded${NC}"
+echo -e "${GREEN}Model downloaded${NC}"
 echo ""
 
 # Ingest sample documents
