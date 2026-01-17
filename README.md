@@ -62,13 +62,6 @@ scripts/
 - Uses SQLite and on-disk FAISS indexes stored inside `storage/`.
 - All configuration is auditable through `.env`, `docker-compose.yml`, and the source tree.
 
-### Performance Profile
-
-- First query takes roughly 3-10 seconds while models load; subsequent calls land in 1-3 seconds.
-- Ingests roughly 1-2 medium documents per second on a modern laptop CPU.
-- Typical memory usage stays between 2-4 GB with the 7B default model.
-- Disk footprint is about 10 GB including models, FAISS index, and metadata.
-
 ### Extensibility
 
 1. Swap embeddings or LLMs by editing `.env` and rerunning `docker-compose restart`.
@@ -464,6 +457,4 @@ MIT License - Feel free to modify and use for your NCL preparation!
 2. Ingest documents via API
 3. Start asking questions!
 4. Review query logs to improve your knowledge base
-
-Good luck with your CTF preparation! 
 
